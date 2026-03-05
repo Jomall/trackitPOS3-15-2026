@@ -48,7 +48,8 @@ export default function AutoParts() {
     zone: '',
     stockStatus: '',
     minPrice: '',
-    maxPrice: ''
+    maxPrice: '',
+    licensePlate: ''
   })
 
   const warehouseZones = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', 'D1', 'D2', 'D3']
@@ -194,7 +195,9 @@ export default function AutoParts() {
           !(part.make && part.make.toLowerCase().includes(search)) &&
           !(part.partNumber && part.partNumber.toLowerCase().includes(search)) &&
           !(part.description && part.description.toLowerCase().includes(search)) &&
-          !(part.zone && part.zone.toLowerCase().includes(search))) {
+          !(part.zone && part.zone.toLowerCase().includes(search)) &&
+          !(part.licensePlate && part.licensePlate.toLowerCase().includes(search)) &&
+          !(part.vin && part.vin.toLowerCase().includes(search))) {
         return false
       }
     }
@@ -206,6 +209,9 @@ export default function AutoParts() {
     }
     if (filters.minPrice && (part.price || 0) < parseFloat(filters.minPrice)) return false
     if (filters.maxPrice && (part.price || 0) > parseFloat(filters.maxPrice)) return false
+    if (filters.licensePlate && part.licensePlate) {
+      if (!part.licensePlate.toLowerCase().includes(filters.licensePlate.toLowerCase())) return false
+    }
     return true
   })
 
@@ -217,17 +223,22 @@ export default function AutoParts() {
   const zonesSet = new Set(parts.filter(p => p.zone).map(p => p.zone))
   zonesSet.forEach(z => uniqueZones.push(z as string))
 
+  const uniqueLicensePlates: string[] = []
+  const lpSet = new Set(parts.filter(p => p.licensePlate).map(p => p.licensePlate))
+  lpSet.forEach(lp => uniqueLicensePlates.push(lp as string))
+
   const stats = {
     totalParts: parts.length,
     totalValue: parts.reduce((sum, p) => sum + (p.price || 0) * p.quantity, 0),
     lowStock: parts.filter(p => getStockStatus(p).status === 'low' || getStockStatus(p).status === 'out').length,
     outOfStock: parts.filter(p => getStockStatus(p).status === 'out').length,
     partsByZone: uniqueZones.map(z => ({ zone: z, count: parts.filter(p => p.zone === z).length })),
-    partsByMake: uniqueMakes.map(m => ({ make: m, count: parts.filter(p => p.make === m).length }))
+    partsByMake: uniqueMakes.map(m => ({ make: m, count: parts.filter(p => p.make === m).length })),
+    partsByLicensePlate: uniqueLicensePlates.map(lp => ({ licensePlate: lp, count: parts.filter(p => p.licensePlate === lp).length }))
   }
 
   const printReport = () => {
-    const printContent = '<html><head><title>Auto Parts Inventory Report</title></head><body><h1>Auto Parts Inventory Report</h1><p>Generated: ' + new Date().toLocaleString() + '</p><h2>Summary</h2><p>Total Parts: ' + stats.totalParts + '</p><p>Total Value: $' + stats.totalValue.toFixed(2) + '</p><p>Low Stock: ' + stats.lowStock + '</p><p>Out of Stock: ' + stats.outOfStock + '</p><h2>Parts List</h2><table border="1" style="border-collapse: collapse; width: 100%"><tr><th>Name</th><th>Make</th><th>Part #</th><th>Qty</th><th>Price</th><th>Zone</th></tr>' + filteredParts.map(p => '<tr><td>' + p.name + '</td><td>' + (p.make || '') + '</td><td>' + (p.partNumber || '') + '</td><td>' + p.quantity + '</td><td>$' + (p.price || 0).toFixed(2) + '</td><td>' + (p.zone || '') + '</td></tr>').join('') + '</table></body></html>'
+    const printContent = '<html><head><title>Auto Parts Inventory Report</title></head><body><h1>Auto Parts Inventory Report</h1><p>Generated: ' + new Date().toLocaleString() + '</p><h2>Summary</h2><p>Total Parts: ' + stats.totalParts + '</p><p>Total Value: $' + stats.totalValue.toFixed(2) + '</p><p>Low Stock: ' + stats.lowStock + '</p><p>Out of Stock: ' + stats.outOfStock + '</p><h2>Parts List</h2><table border="1" style="border-collapse: collapse; width: 100%"><tr><th>Name</th><th>Make</th><th>Part #</th><th>License Plate</th><th>Qty</th><th>Price</th><th>Zone</th></tr>' + filteredParts.map(p => '<tr><td>' + p.name + '</td><td>' + (p.make || '') + '</td><td>' + (p.partNumber || '') + '</td><td>' + (p.licensePlate || '') + '</td><td>' + p.quantity + '</td><td>$' + (p.price || 0).toFixed(2) + '</td><td>' + (p.zone || '') + '</td></tr>').join('') + '</table></body></html>'
     const win = window.open('', '_blank')
     if (win) {
       win.document.write(printContent)
@@ -312,6 +323,7 @@ export default function AutoParts() {
                           </span>
                         </div>
                         <p className="text-gray-600">{part.make} {part.partNumber && "- " + part.partNumber}</p>
+                        {part.licensePlate && <p className="text-sm text-blue-600 font-medium">🚗 {part.licensePlate}</p>}
                         <p className="text-sm text-gray-500 mb-2">{part.description}</p>
                         <div className="flex justify-between items-center mt-3">
                           <div>
@@ -366,6 +378,14 @@ export default function AutoParts() {
                   <input type="text" value={newPart.partNumber} onChange={(e) => setNewPart({...newPart, partNumber: e.target.value})} className="border rounded px-3 py-2 w-full" />
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle License Plate *</label>
+                  <input type="text" value={newPart.licensePlate} onChange={(e) => setNewPart({...newPart, licensePlate: e.target.value})} className="border rounded px-3 py-2 w-full" placeholder="Enter vehicle license plate" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">VIN</label>
+                  <input type="text" value={newPart.vin} onChange={(e) => setNewPart({...newPart, vin: e.target.value})} className="border rounded px-3 py-2 w-full" placeholder="Vehicle Identification Number" />
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Quantity *</label>
                   <input type="number" value={newPart.quantity} onChange={(e) => setNewPart({...newPart, quantity: parseInt(e.target.value)})} className="border rounded px-3 py-2 w-full" required />
                 </div>
@@ -415,6 +435,7 @@ export default function AutoParts() {
                 <thead className="bg-gray-100">
                   <tr>
                     <th className="px-4 py-3 text-left">Part</th>
+                    <th className="px-4 py-3 text-left">License Plate</th>
                     <th className="px-4 py-3 text-left">Current Qty</th>
                     <th className="px-4 py-3 text-left">Desired</th>
                     <th className="px-4 py-3 text-left">Status</th>
@@ -427,6 +448,7 @@ export default function AutoParts() {
                     return (
                       <tr key={part.id} className="border-t">
                         <td className="px-4 py-3">{part.name}<br/><span className="text-sm text-gray-500">{part.make}</span></td>
+                        <td className="px-4 py-3">{part.licensePlate || '-'}</td>
                         <td className="px-4 py-3 font-bold">{part.quantity}</td>
                         <td className="px-4 py-3">{part.desiredStockLevel}</td>
                         <td className="px-4 py-3"><span className={"px-2 py-1 rounded text-xs font-semibold " + status.color}>{status.label}</span></td>
@@ -460,7 +482,11 @@ export default function AutoParts() {
                   {uniqueZones.map(z => <option key={z} value={z}>{z}</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <select value={filters.licensePlate} onChange={(e) => setFilters({...filters, licensePlate: e.target.value})} className="border rounded px-3 py-2">
+                  <option value="">All License Plates</option>
+                  {uniqueLicensePlates.map(lp => <option key={lp} value={lp}>{lp}</option>)}
+                </select>
                 <select value={filters.stockStatus} onChange={(e) => setFilters({...filters, stockStatus: e.target.value})} className="border rounded px-3 py-2">
                   <option value="">All Status</option>
                   <option value="out">Out of Stock</option>
@@ -469,8 +495,10 @@ export default function AutoParts() {
                   <option value="over">Overstocked</option>
                 </select>
                 <input type="number" placeholder="Min Price" value={filters.minPrice} onChange={(e) => setFilters({...filters, minPrice: e.target.value})} className="border rounded px-3 py-2" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <input type="number" placeholder="Max Price" value={filters.maxPrice} onChange={(e) => setFilters({...filters, maxPrice: e.target.value})} className="border rounded px-3 py-2" />
-                <button onClick={() => {setSearchTerm(''); setFilters({make: '', zone: '', stockStatus: '', minPrice: '', maxPrice: ''})}} className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Clear</button>
+                <button onClick={() => {setSearchTerm(''); setFilters({make: '', zone: '', stockStatus: '', minPrice: '', maxPrice: '', licensePlate: ''})}} className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Clear</button>
               </div>
             </div>
             <p className="mb-4">Found: {filteredParts.length} parts</p>
@@ -484,6 +512,7 @@ export default function AutoParts() {
                       <span className={"px-2 py-1 rounded text-xs " + status.color}>{status.label}</span>
                     </div>
                     <p className="text-gray-600">{part.make} - {part.partNumber}</p>
+                    {part.licensePlate && <p className="text-blue-600 font-medium">🚗 {part.licensePlate}</p>}
                     <p>Qty: {part.quantity} | ${(part.price || 0).toFixed(2)} | Zone: {part.zone || 'N/A'}</p>
                   </div>
                 )
@@ -509,6 +538,7 @@ export default function AutoParts() {
                         <div>
                           <h3 className="font-bold">{part.name}</h3>
                           <p>{part.make} - {part.partNumber}</p>
+                          {part.licensePlate && <p className="text-blue-600">🚗 {part.licensePlate}</p>}
                           <p>Current: {part.quantity} | Desired: {part.desiredStockLevel}</p>
                         </div>
                         <div className="flex gap-2">
@@ -551,7 +581,7 @@ export default function AutoParts() {
                 <p className="text-3xl font-bold text-red-600">{stats.outOfStock}</p>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-white p-6 rounded-lg shadow-md">
                 <h3 className="text-lg font-bold mb-4">Parts by Zone</h3>
                 {stats.partsByZone.map(z => (
@@ -567,6 +597,15 @@ export default function AutoParts() {
                   <div key={m.make} className="flex justify-between py-2 border-b">
                     <span>{m.make}</span>
                     <span className="font-bold">{m.count} parts</span>
+                  </div>
+                ))}
+              </div>
+              <div className="bg-white p-6 rounded-lg shadow-md">
+                <h3 className="text-lg font-bold mb-4">Parts by Vehicle</h3>
+                {stats.partsByLicensePlate.map(lp => (
+                  <div key={lp.licensePlate} className="flex justify-between py-2 border-b">
+                    <span>🚗 {lp.licensePlate}</span>
+                    <span className="font-bold">{lp.count} parts</span>
                   </div>
                 ))}
               </div>
