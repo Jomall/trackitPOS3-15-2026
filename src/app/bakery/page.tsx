@@ -17,6 +17,10 @@ interface BakeryItem {
   serviceSchedule?: string
   lastServiceDate?: string
   nextServiceDate?: string
+  // New status fields for tracking expired/serviced states
+  status?: 'active' | 'expired' | 'serviced'
+  statusDate?: string
+  statusNotes?: string
 }
 
 interface ServiceRecord {
@@ -56,6 +60,11 @@ export default function Bakery() {
     minQuantity: '',
     maxQuantity: ''
   })
+  
+  // New state for item detail modal and status updates
+  const [selectedItem, setSelectedItem] = useState<BakeryItem | null>(null)
+  const [showItemModal, setShowItemModal] = useState(false)
+  const [statusNotes, setStatusNotes] = useState('')
 
   useEffect(() => {
     fetchItems()
@@ -158,6 +167,35 @@ export default function Bakery() {
       const url = URL.createObjectURL(file)
       setNewItem({...newItem, image: url})
     }
+  }
+
+  // New function to open item detail modal
+  const openItemModal = (item: BakeryItem) => {
+    setSelectedItem(item)
+    setStatusNotes(item.statusNotes || '')
+    setShowItemModal(true)
+  }
+
+  // New function to update item status (expired or serviced)
+  const updateItemStatus = (newStatus: 'active' | 'expired' | 'serviced') => {
+    if (!selectedItem) return
+    
+    const updatedItems = items.map(item => {
+      if (item.id === selectedItem.id) {
+        return {
+          ...item,
+          status: newStatus,
+          statusDate: new Date().toISOString().split('T')[0],
+          statusNotes: statusNotes
+        }
+      }
+      return item
+    })
+    
+    setItems(updatedItems)
+    setShowItemModal(false)
+    setStatusNotes('')
+    setSelectedItem(null)
   }
 
   const getStockStatus = (item: BakeryItem) => {
@@ -367,6 +405,9 @@ export default function Bakery() {
                           </div>
                         </div>
                         <div className="flex gap-2 mt-4">
+                          <button onClick={() => openItemModal(item)} className="flex-1 bg-purple-500 text-white py-1 rounded hover:bg-purple-600 text-sm">
+                            Details
+                          </button>
                           <button onClick={() => addStock(item.id)} className="flex-1 bg-green-500 text-white py-1 rounded hover:bg-green-600 text-sm">
                             + Stock
                           </button>
@@ -375,9 +416,6 @@ export default function Bakery() {
                           </button>
                           <button onClick={() => editItem(item)} className="flex-1 bg-blue-500 text-white py-1 rounded hover:bg-blue-600 text-sm">
                             Edit
-                          </button>
-                          <button onClick={() => setDeleteConfirm(item.id)} className="flex-1 bg-red-500 text-white py-1 rounded hover:bg-red-600 text-sm">
-                            Delete
                           </button>
                         </div>
                       </div>
@@ -751,6 +789,138 @@ export default function Bakery() {
             <div className="flex gap-3 justify-end">
               <button onClick={() => setDeleteConfirm(null)} className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Cancel</button>
               <button onClick={() => handleDelete(deleteConfirm)} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showItemModal && selectedItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start mb-4">
+              <h3 className="text-xl font-bold">{selectedItem.name}</h3>
+              <button onClick={() => setShowItemModal(false)} className="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-gray-600"><span className="font-semibold">Item Number:</span> {selectedItem.itemNumber}</p>
+              <p className="text-gray-600 capitalize"><span className="font-semibold">Type:</span> {selectedItem.type}</p>
+              {selectedItem.description && <p className="text-gray-600"><span className="font-semibold">Description:</span> {selectedItem.description}</p>}
+              <p className="text-gray-600"><span className="font-semibold">Quantity:</span> {selectedItem.quantity}</p>
+              {selectedItem.desiredStockLevel > 0 && <p className="text-gray-600"><span className="font-semibold">Desired Stock:</span> {selectedItem.desiredStockLevel}</p>}
+            </div>
+
+            <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+              <h4 className="font-bold mb-2">Alert Recommendations</h4>
+              {selectedItem.type === 'supplies' && selectedItem.expirationDate && (
+                <div className="mb-2">
+                  <p className="text-sm"><span className="font-semibold">Expiration:</span> {selectedItem.expirationDate}</p>
+                  {getExpirationStatus(selectedItem) && (
+                    <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${getExpirationStatus(selectedItem)?.color}`}>
+                      {getExpirationStatus(selectedItem)?.label}
+                    </span>
+                  )}
+                </div>
+              )}
+              {(selectedItem.type === 'machinery' || selectedItem.type === 'equipment') && selectedItem.nextServiceDate && (
+                <div className="mb-2">
+                  <p className="text-sm"><span className="font-semibold">Next Service:</span> {selectedItem.nextServiceDate}</p>
+                  <p className="text-sm"><span className="font-semibold">Schedule:</span> {selectedItem.serviceSchedule}</p>
+                  {getServiceStatus(selectedItem) && (
+                    <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${getServiceStatus(selectedItem)?.color}`}>
+                      {getServiceStatus(selectedItem)?.label}
+                    </span>
+                  )}
+                </div>
+              )}
+              
+              <div className="mt-3 p-3 bg-white rounded border">
+                {selectedItem.type === 'supplies' && selectedItem.expirationDate && getExpirationStatus(selectedItem)?.status === 'expired' && (
+                  <>
+                    <p className="text-red-600 font-semibold">⚠️ This item has expired!</p>
+                    <p className="text-sm text-gray-600 mb-2">Recommend: Remove from inventory and dispose of properly.</p>
+                  </>
+                )}
+                {selectedItem.type === 'supplies' && selectedItem.expirationDate && getExpirationStatus(selectedItem)?.status === 'expiring-soon' && (
+                  <>
+                    <p className="text-orange-600 font-semibold">⏰ Expiring Soon!</p>
+                    <p className="text-sm text-gray-600 mb-2">Recommend: Use immediately or mark as expired.</p>
+                  </>
+                )}
+                {(selectedItem.type === 'machinery' || selectedItem.type === 'equipment') && getServiceStatus(selectedItem)?.status === 'overdue' && (
+                  <>
+                    <p className="text-red-600 font-semibold">🔧 Service Overdue!</p>
+                    <p className="text-sm text-gray-600 mb-2">Recommend: Schedule service immediately.</p>
+                  </>
+                )}
+                {(selectedItem.type === 'machinery' || selectedItem.type === 'equipment') && getServiceStatus(selectedItem)?.status === 'due-soon' && (
+                  <>
+                    <p className="text-orange-600 font-semibold">📅 Service Due Soon!</p>
+                    <p className="text-sm text-gray-600 mb-2">Recommend: Schedule maintenance.</p>
+                  </>
+                )}
+                {getStockStatus(selectedItem).status === 'low' && (
+                  <>
+                    <p className="text-yellow-600 font-semibold">📦 Low Stock!</p>
+                    <p className="text-sm text-gray-600 mb-2">Recommend: Order more supplies.</p>
+                  </>
+                )}
+                {getStockStatus(selectedItem).status === 'out' && (
+                  <>
+                    <p className="text-red-600 font-semibold">📦 Out of Stock!</p>
+                    <p className="text-sm text-gray-600 mb-2">Recommend: Order more supplies immediately.</p>
+                  </>
+                )}
+                {getStockStatus(selectedItem).status === 'normal' && !(selectedItem.type === 'supplies' && selectedItem.expirationDate && (getExpirationStatus(selectedItem)?.status === 'expired' || getExpirationStatus(selectedItem)?.status === 'expiring-soon')) && !((selectedItem.type === 'machinery' || selectedItem.type === 'equipment') && (getServiceStatus(selectedItem)?.status === 'overdue' || getServiceStatus(selectedItem)?.status === 'due-soon')) && (
+                  <p className="text-green-600 font-semibold">✅ All Good - This item is in good condition.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <h4 className="font-bold mb-2">Update Status</h4>
+              <div className="mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea 
+                  value={statusNotes} 
+                  onChange={(e) => setStatusNotes(e.target.value)}
+                  className="border rounded px-3 py-2 w-full" 
+                  rows={2}
+                  placeholder="Add notes about this status update..."
+                />
+              </div>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => updateItemStatus('expired')}
+                  className="flex-1 bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+                >
+                  Mark as Expired
+                </button>
+                <button 
+                  onClick={() => updateItemStatus('serviced')}
+                  className="flex-1 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                >
+                  Mark as Serviced
+                </button>
+                <button 
+                  onClick={() => updateItemStatus('active')}
+                  className="flex-1 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+                >
+                  Mark Active
+                </button>
+              </div>
+            </div>
+
+            {selectedItem.status && (
+              <div className="mb-4 p-3 bg-gray-100 rounded">
+                <p className="text-sm"><span className="font-semibold">Current Status:</span> {selectedItem.status}</p>
+                {selectedItem.statusDate && <p className="text-sm"><span className="font-semibold">Status Date:</span> {selectedItem.statusDate}</p>}
+                {selectedItem.statusNotes && <p className="text-sm"><span className="font-semibold">Notes:</span> {selectedItem.statusNotes}</p>}
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end mt-4">
+              <button onClick={() => setShowItemModal(false)} className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Close</button>
             </div>
           </div>
         </div>
