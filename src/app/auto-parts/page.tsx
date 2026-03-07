@@ -7,6 +7,8 @@ interface AutoPart {
   id: number
   name: string
   make?: string
+  model?: string
+  year?: number
   partNumber?: string
   description?: string
   quantity: number
@@ -15,12 +17,27 @@ interface AutoPart {
   licensePlate?: string
   vin?: string
   purchaseLocation?: string
+  website?: string
   desiredStockLevel: number
   zone?: string
   dateOfEntry: string
   lastUpdated: string
   lastStockUpdate?: string
+  stockHistory?: { date: string; type: string; quantity: number; notes: string }[]
+  metrics?: { key: string; value: string; unit?: string }[]
 }
+
+// Popular auto parts websites for searching
+const AUTO_PARTS_WEBSITES = [
+  { name: 'AutoZone', url: 'https://www.autozone.com', searchParam: '?search=' },
+  { name: "O'Reilly Auto Parts", url: 'https://www.oreillyauto.com', searchParam: '?search=' },
+  { name: 'Advance Auto Parts', url: 'https://shop.advanceautoparts.com', searchParam: '?search=' },
+  { name: 'Amazon', url: 'https://www.amazon.com', searchParam: 's?k=' },
+  { name: 'RockAuto', url: 'https://www.rockauto.com', searchParam: '/en/search/?searchterm=' },
+  { name: 'CARiD', url: 'https://www.carid.com', searchParam: '/parts?search=' },
+  { name: 'Summit Racing', url: 'https://www.summitracing.com', searchParam: '/search?type=part&query=' },
+  { name: 'eBay', url: 'https://www.ebay.com', searchParam: '/sch/i.html?_nkw=' },
+]
 
 export default function AutoParts() {
   const [activeTab, setActiveTab] = useState('inventory')
@@ -29,6 +46,8 @@ export default function AutoParts() {
   const [newPart, setNewPart] = useState({ 
     name: '', 
     make: '', 
+    model: '',
+    year: '',
     partNumber: '', 
     description: '', 
     quantity: 0, 
@@ -37,8 +56,10 @@ export default function AutoParts() {
     licensePlate: '', 
     vin: '',
     purchaseLocation: '',
+    website: '',
     desiredStockLevel: 0,
-    zone: ''
+    zone: '',
+    metrics: [] as { key: string; value: string; unit?: string }[]
   })
   const [editingPart, setEditingPart] = useState<AutoPart | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
@@ -52,6 +73,45 @@ export default function AutoParts() {
     licensePlate: ''
   })
 
+  // Report filters
+  const [reportFilter, setReportFilter] = useState('all')
+  const [reportMakeFilter, setReportMakeFilter] = useState('all')
+  
+  // Stock transaction modal state
+  const [showStockModal, setShowStockModal] = useState(false)
+  const [stockPart, setStockPart] = useState<AutoPart | null>(null)
+  const [stockChangeType, setStockChangeType] = useState<'add' | 'remove'>('add')
+  const [stockQuantity, setStockQuantity] = useState(1)
+  const [stockNotes, setStockNotes] = useState('')
+
+  // Reorder modal state
+  const [showReorderModal, setShowReorderModal] = useState(false)
+  const [reorderPart, setReorderPart] = useState<AutoPart | null>(null)
+  const [suggestedWebsites, setSuggestedWebsites] = useState<{name: string; url: string}[]>([])
+
+  // Metrics state
+  const [newMetricKey, setNewMetricKey] = useState('')
+  const [newMetricValue, setNewMetricValue] = useState('')
+  const [newMetricUnit, setNewMetricUnit] = useState('')
+
+  const addMetric = () => {
+    if (newMetricKey && newMetricValue) {
+      setNewPart({
+        ...newPart,
+        metrics: [...(newPart.metrics || []), { key: newMetricKey, value: newMetricValue, unit: newMetricUnit || undefined }]
+      })
+      setNewMetricKey('')
+      setNewMetricValue('')
+      setNewMetricUnit('')
+    }
+  }
+
+  const removeMetric = (index: number) => {
+    const updatedMetrics = [...(newPart.metrics || [])]
+    updatedMetrics.splice(index, 1)
+    setNewPart({ ...newPart, metrics: updatedMetrics })
+  }
+
   const warehouseZones = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', 'D1', 'D2', 'D3']
 
   useEffect(() => {
@@ -63,9 +123,14 @@ export default function AutoParts() {
     try {
       const res = await fetch('/api/auto-parts')
       const data = await res.json()
-      setParts(data)
+      if (Array.isArray(data)) {
+        setParts(data)
+      } else {
+        setParts([])
+      }
     } catch (error) {
       console.error('Error fetching parts:', error)
+      setParts([])
     }
     setLoading(false)
   }
@@ -73,23 +138,36 @@ export default function AutoParts() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      let response
+      const partData = {
+        ...newPart,
+        year: newPart.year ? parseInt(newPart.year as string) : null
+      }
+      
       if (editingPart) {
-        await fetch('/api/auto-parts', {
+        response = await fetch('/api/auto-parts', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: editingPart.id, ...newPart, lastUpdated: new Date() })
+          body: JSON.stringify({ id: editingPart.id, ...partData, lastUpdated: new Date() })
         })
       } else {
-        await fetch('/api/auto-parts', {
+        response = await fetch('/api/auto-parts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newPart)
+          body: JSON.stringify(partData)
         })
       }
-      fetchParts()
-      resetForm()
+      
+      if (response.ok) {
+        await fetchParts()
+        resetForm()
+        alert(editingPart ? 'Part updated successfully!' : 'Part added successfully!')
+      } else {
+        alert('Failed to save part. Please try again.')
+      }
     } catch (error) {
       console.error('Error saving part:', error)
+      alert('Error saving part. Please check if the server is running.')
     }
   }
 
@@ -103,59 +181,120 @@ export default function AutoParts() {
     }
   }
 
-  const addStock = async (id: number) => {
-    const quantityToAdd = parseInt(prompt('Enter quantity to add:', '1') || '0')
-    if (quantityToAdd > 0) {
-      const part = parts.find(p => p.id === id)
-      if (part) {
-        try {
-          await fetch('/api/auto-parts', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              id, 
-              quantity: part.quantity + quantityToAdd,
-              lastUpdated: new Date(),
-              lastStockUpdate: new Date()
-            })
-          })
-          fetchParts()
-        } catch (error) {
-          console.error('Error adding stock:', error)
-        }
+  // Open stock transaction modal
+  const openStockModal = (part: AutoPart, type: 'add' | 'remove') => {
+    setStockPart(part)
+    setStockChangeType(type)
+    setStockQuantity(1)
+    setStockNotes('')
+    setShowStockModal(true)
+  }
+
+  // Process stock transaction
+  const processStockTransaction = async () => {
+    if (!stockPart || stockQuantity <= 0) return
+
+    const newQuantity = stockChangeType === 'add' 
+      ? stockPart.quantity + stockQuantity 
+      : Math.max(0, stockPart.quantity - stockQuantity)
+
+    const transaction = {
+      date: new Date().toISOString().split('T')[0],
+      type: stockChangeType,
+      quantity: stockQuantity,
+      notes: stockNotes
+    }
+
+    try {
+      const response = await fetch('/api/auto-parts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          id: stockPart.id, 
+          quantity: newQuantity,
+          lastUpdated: new Date().toISOString(),
+          lastStockUpdate: new Date().toISOString()
+        })
+      })
+      
+      if (response.ok) {
+        setParts(parts.map(part => {
+          if (part.id === stockPart.id) {
+            return {
+              ...part,
+              quantity: newQuantity,
+              lastUpdated: new Date().toISOString(),
+              lastStockUpdate: new Date().toISOString(),
+              stockHistory: [...(part.stockHistory || []), transaction]
+            }
+          }
+          return part
+        }))
+        setShowStockModal(false)
+        setStockPart(null)
+        alert(stockChangeType === 'add' ? 'Stock added successfully!' : 'Stock removed successfully!')
       }
+    } catch (error) {
+      console.error('Error updating stock:', error)
+      alert('Error updating stock. Please try again.')
     }
   }
 
-  const removeStock = async (id: number) => {
-    const quantityToRemove = parseInt(prompt('Enter quantity to remove:', '1') || '0')
-    if (quantityToRemove > 0) {
-      const part = parts.find(p => p.id === id)
-      if (part) {
-        try {
-          await fetch('/api/auto-parts', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              id, 
-              quantity: Math.max(0, part.quantity - quantityToRemove),
-              lastUpdated: new Date(),
-              lastStockUpdate: new Date()
-            })
-          })
-          fetchParts()
-        } catch (error) {
-          console.error('Error removing stock:', error)
-        }
-      }
+  // Open reorder modal with suggested websites
+  const openReorderModal = (part: AutoPart) => {
+    setReorderPart(part)
+    generateSuggestedWebsites(part)
+    setShowReorderModal(true)
+  }
+
+  // Generate suggested websites based on part details
+  const generateSuggestedWebsites = (part: AutoPart) => {
+    const searchTerms = []
+    
+    // Build search query from part details
+    if (part.name) searchTerms.push(part.name)
+    if (part.make) searchTerms.push(part.make)
+    if (part.model) searchTerms.push(part.model)
+    if (part.year) searchTerms.push(part.year.toString())
+    if (part.partNumber) searchTerms.push(part.partNumber)
+    
+    const searchQuery = searchTerms.join(' ')
+    const encodedQuery = encodeURIComponent(searchQuery)
+    
+    // Generate website URLs
+    const websites = AUTO_PARTS_WEBSITES.map(site => ({
+      name: site.name,
+      url: `${site.url}${site.searchParam}${encodedQuery}`
+    }))
+    
+    // If the part has a custom website, add it to the top
+    if (part.website) {
+      websites.unshift({ name: 'Custom Website', url: part.website })
+    }
+    
+    // If the part has a purchase location (physical store), add it
+    if (part.purchaseLocation) {
+      websites.push({ name: `Visit: ${part.purchaseLocation}`, url: '#' })
+    }
+    
+    setSuggestedWebsites(websites)
+  }
+
+  // Open website in new tab
+  const openWebsite = (url: string) => {
+    if (url === '#') {
+      alert(`Visit the store: ${reorderPart?.purchaseLocation}`)
+    } else {
+      window.open(url, '_blank')
     }
   }
 
   const resetForm = () => {
     setNewPart({ 
-      name: '', make: '', partNumber: '', description: '', 
+      name: '', make: '', model: '', year: '', partNumber: '', description: '', 
       quantity: 0, price: 0, photo: '', licensePlate: '', 
-      vin: '', purchaseLocation: '', desiredStockLevel: 0, zone: '' 
+      vin: '', purchaseLocation: '', website: '', desiredStockLevel: 0, zone: '',
+      metrics: []
     })
     setEditingPart(null)
   }
@@ -164,6 +303,8 @@ export default function AutoParts() {
     setNewPart({
       name: part.name,
       make: part.make || '',
+      model: part.model || '',
+      year: part.year?.toString() || '',
       partNumber: part.partNumber || '',
       description: part.description || '',
       quantity: part.quantity,
@@ -172,8 +313,10 @@ export default function AutoParts() {
       licensePlate: part.licensePlate || '',
       vin: part.vin || '',
       purchaseLocation: part.purchaseLocation || '',
+      website: part.website || '',
       desiredStockLevel: part.desiredStockLevel,
-      zone: part.zone || ''
+      zone: part.zone || '',
+      metrics: part.metrics || []
     })
     setEditingPart(part)
     setActiveTab('add')
@@ -215,6 +358,148 @@ export default function AutoParts() {
     return true
   })
 
+  // Get parts for reports based on filter
+  const getReportParts = () => {
+    let filtered = [...parts]
+    
+    // Filter by make
+    if (reportMakeFilter !== 'all') {
+      filtered = filtered.filter(part => part.make === reportMakeFilter)
+    }
+    
+    // Filter by status
+    switch (reportFilter) {
+      case 'low-stock':
+        filtered = filtered.filter(part => getStockStatus(part).status === 'low')
+        break
+      case 'out-of-stock':
+        filtered = filtered.filter(part => getStockStatus(part).status === 'out')
+        break
+      case 'reorder':
+        // Parts that need reordering: low stock or out of stock
+        filtered = filtered.filter(part => {
+          const status = getStockStatus(part)
+          return status.status === 'low' || status.status === 'out'
+        })
+        break
+    }
+    
+    return filtered
+  }
+
+  // Print comprehensive report
+  const printReport = () => {
+    const reportParts = getReportParts()
+    const filterLabel = reportFilter === 'all' ? 'All Parts' : 
+                       reportFilter === 'low-stock' ? 'Low Stock Parts' :
+                       reportFilter === 'out-of-stock' ? 'Out of Stock Parts' :
+                       reportFilter === 'reorder' ? 'Parts Needing Reorder' : 'All Parts'
+    
+    const makeLabel = reportMakeFilter === 'all' ? 'All Makes' : reportMakeFilter
+
+    let tableRows = reportParts.map(p => {
+      const status = getStockStatus(p)
+      return `<tr>
+        <td style="border:1px solid #ddd;padding:8px;">${p.name}</td>
+        <td style="border:1px solid #ddd;padding:8px;">${p.year || ''} ${p.make || ''} ${p.model || ''}</td>
+        <td style="border:1px solid #ddd;padding:8px;">${p.partNumber || '-'}</td>
+        <td style="border:1px solid #ddd;padding:8px;">${p.licensePlate || '-'}</td>
+        <td style="border:1px solid #ddd;padding:8px;">${p.quantity}</td>
+        <td style="border:1px solid #ddd;padding:8px;">$${(p.price || 0).toFixed(2)}</td>
+        <td style="border:1px solid #ddd;padding:8px;">${p.zone || '-'}</td>
+        <td style="border:1px solid #ddd;padding:8px;">${status.label}</td>
+      </tr>`
+    }).join('')
+
+    const printContent = `
+      <html>
+      <head>
+        <title>Auto Parts Inventory Report - ${filterLabel}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          h1 { color: #dc2626; margin-bottom: 5px; }
+          h2 { color: #991b1b; margin-top: 0; }
+          .meta { color: #666; margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+          th { background: #fee2e2; padding: 10px; text-align: left; border: 1px solid #ddd; }
+          .summary { margin-top: 20px; padding: 15px; background: #f3f4f6; border-radius: 8px; }
+        </style>
+      </head>
+      <body>
+        <h1>🚗 Auto Parts Inventory Report</h1>
+        <h2>${filterLabel}</h2>
+        <div class="meta">
+          <p><strong>Filter:</strong> ${makeLabel}</p>
+          <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
+          <p><strong>Total Parts:</strong> ${reportParts.length}</p>
+        </div>
+        
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Vehicle</th>
+              <th>Part #</th>
+              <th>License Plate</th>
+              <th>Qty</th>
+              <th>Price</th>
+              <th>Zone</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+        
+        <div class="summary">
+          <h3>Summary</h3>
+          <p><strong>Total Parts in Report:</strong> ${reportParts.length}</p>
+          <p><strong>Low Stock:</strong> ${reportParts.filter(p => getStockStatus(p).status === 'low').length}</p>
+          <p><strong>Out of Stock:</strong> ${reportParts.filter(p => getStockStatus(p).status === 'out').length}</p>
+          <p><strong>Total Value:</strong> $${reportParts.reduce((sum, p) => sum + (p.price || 0) * p.quantity, 0).toFixed(2)}</p>
+        </div>
+      </body>
+      </html>
+    `
+    
+    const win = window.open('', '_blank')
+    if (win) {
+      win.document.write(printContent)
+      win.document.close()
+      win.print()
+    }
+  }
+
+  // Export report to CSV
+  const exportReportCSV = () => {
+    const reportParts = getReportParts()
+    const headers = ['Name', 'Year', 'Make', 'Model', 'Part Number', 'License Plate', 'VIN', 'Quantity', 'Price', 'Desired Stock', 'Zone', 'Stock Status', 'Purchase Location', 'Website']
+    const rows = reportParts.map(p => [
+      p.name,
+      p.year || '',
+      p.make || '',
+      p.model || '',
+      p.partNumber || '',
+      p.licensePlate || '',
+      p.vin || '',
+      p.quantity,
+      p.price || '',
+      p.desiredStockLevel,
+      p.zone || '',
+      getStockStatus(p).label,
+      p.purchaseLocation || '',
+      p.website || ''
+    ])
+    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `auto-parts-report-${reportFilter}-${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+  }
+
   const uniqueMakes: string[] = []
   const makesSet = new Set(parts.filter(p => p.make).map(p => p.make))
   makesSet.forEach(m => uniqueMakes.push(m as string))
@@ -237,8 +522,8 @@ export default function AutoParts() {
     partsByLicensePlate: uniqueLicensePlates.map(lp => ({ licensePlate: lp, count: parts.filter(p => p.licensePlate === lp).length }))
   }
 
-  const printReport = () => {
-    const printContent = '<html><head><title>Auto Parts Inventory Report</title></head><body><h1>Auto Parts Inventory Report</h1><p>Generated: ' + new Date().toLocaleString() + '</p><h2>Summary</h2><p>Total Parts: ' + stats.totalParts + '</p><p>Total Value: $' + stats.totalValue.toFixed(2) + '</p><p>Low Stock: ' + stats.lowStock + '</p><p>Out of Stock: ' + stats.outOfStock + '</p><h2>Parts List</h2><table border="1" style="border-collapse: collapse; width: 100%"><tr><th>Name</th><th>Make</th><th>Part #</th><th>License Plate</th><th>Qty</th><th>Price</th><th>Zone</th></tr>' + filteredParts.map(p => '<tr><td>' + p.name + '</td><td>' + (p.make || '') + '</td><td>' + (p.partNumber || '') + '</td><td>' + (p.licensePlate || '') + '</td><td>' + p.quantity + '</td><td>$' + (p.price || 0).toFixed(2) + '</td><td>' + (p.zone || '') + '</td></tr>').join('') + '</table></body></html>'
+  const printInventoryReport = () => {
+    const printContent = '<html><head><title>Auto Parts Inventory Report</title></head><body><h1>Auto Parts Inventory Report</h1><p>Generated: ' + new Date().toLocaleString() + '</p><h2>Summary</h2><p>Total Parts: ' + stats.totalParts + '</p><p>Total Value: $' + stats.totalValue.toFixed(2) + '</p><p>Low Stock: ' + stats.lowStock + '</p><p>Out of Stock: ' + stats.outOfStock + '</p><h2>Parts List</h2><table border="1" style="border-collapse: collapse; width: 100%"><tr><th>Name</th><th>Make</th><th>Part #</th><th>License Plate</th><th>Qty</th><th>Price</th><th>Zone</th></tr>' + filteredParts.map(p => '<tr><td>' + p.name + '</td><td>' + (p.year || '') + ' ' + (p.make || '') + ' ' + (p.model || '') + '</td><td>' + (p.partNumber || '') + '</td><td>' + (p.licensePlate || '') + '</td><td>' + p.quantity + '</td><td>$' + (p.price || 0).toFixed(2) + '</td><td>' + (p.zone || '') + '</td></tr>').join('') + '</table></body></html>'
     const win = window.open('', '_blank')
     if (win) {
       win.document.write(printContent)
@@ -253,8 +538,12 @@ export default function AutoParts() {
     { id: 'stock', label: 'Stock Management', icon: '📊' },
     { id: 'search', label: 'Search', icon: '🔍' },
     { id: 'alerts', label: 'Stock Alerts', icon: '⚠️' },
+    { id: 'reorder', label: 'Reorder Parts', icon: '🛒' },
+    { id: 'reports', label: 'Reports', icon: '📋' },
     { id: 'stats', label: 'Statistics', icon: '📈' }
   ]
+
+  const reportParts = getReportParts()
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -296,7 +585,7 @@ export default function AutoParts() {
           <div>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold">All Parts ({parts.length})</h2>
-              <button onClick={printReport} className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700">
+              <button onClick={printInventoryReport} className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700">
                 Print Report
               </button>
             </div>
@@ -317,12 +606,14 @@ export default function AutoParts() {
                     <div key={part.id} className={`bg-white rounded-lg shadow-md overflow-hidden ${part.quantity === 0 ? 'border-2 border-red-500' : ''}`}>
                       <div className="p-4">
                         <div className="flex justify-between items-start mb-2">
-                          <h3 className="font-bold text-lg">{part.name}</h3>
+                          <div>
+                            <h3 className="font-bold text-lg">{part.name}</h3>
+                            <p className="text-sm text-gray-500">{part.year ? `${part.year} ` : ''}{part.make} {part.model}</p>
+                          </div>
                           <span className={`px-2 py-1 rounded text-xs font-semibold ${status.color}`}>
                             {status.label}
                           </span>
                         </div>
-                        <p className="text-gray-600">{part.make} {part.partNumber && "- " + part.partNumber}</p>
                         {part.licensePlate && <p className="text-sm text-blue-600 font-medium">🚗 {part.licensePlate}</p>}
                         <p className="text-sm text-gray-500 mb-2">{part.description}</p>
                         <div className="flex justify-between items-center mt-3">
@@ -338,12 +629,17 @@ export default function AutoParts() {
                           </div>
                         </div>
                         <div className="flex gap-2 mt-4">
-                          <button onClick={() => addStock(part.id)} className="flex-1 bg-green-500 text-white py-1 rounded hover:bg-green-600 text-sm">
+                          <button onClick={() => openStockModal(part, 'add')} className="flex-1 bg-green-500 text-white py-1 rounded hover:bg-green-600 text-sm">
                             + Stock
                           </button>
-                          <button onClick={() => removeStock(part.id)} className="flex-1 bg-yellow-500 text-white py-1 rounded hover:bg-yellow-600 text-sm">
+                          <button onClick={() => openStockModal(part, 'remove')} className="flex-1 bg-yellow-500 text-white py-1 rounded hover:bg-yellow-600 text-sm">
                             - Stock
                           </button>
+                          <button onClick={() => openReorderModal(part)} className="flex-1 bg-purple-500 text-white py-1 rounded hover:bg-purple-600 text-sm">
+                            🛒 Reorder
+                          </button>
+                        </div>
+                        <div className="flex gap-2 mt-2">
                           <button onClick={() => editPart(part)} className="flex-1 bg-blue-500 text-white py-1 rounded hover:bg-blue-600 text-sm">
                             Edit
                           </button>
@@ -371,14 +667,22 @@ export default function AutoParts() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Make</label>
-                  <input type="text" value={newPart.make} onChange={(e) => setNewPart({...newPart, make: e.target.value})} className="border rounded px-3 py-2 w-full" />
+                  <input type="text" value={newPart.make} onChange={(e) => setNewPart({...newPart, make: e.target.value})} className="border rounded px-3 py-2 w-full" placeholder="e.g., Ford, Toyota" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
+                  <input type="text" value={newPart.model} onChange={(e) => setNewPart({...newPart, model: e.target.value})} className="border rounded px-3 py-2 w-full" placeholder="e.g., F-150, Camry" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
+                  <input type="number" value={newPart.year} onChange={(e) => setNewPart({...newPart, year: e.target.value})} className="border rounded px-3 py-2 w-full" placeholder="e.g., 2020" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Part Number</label>
                   <input type="text" value={newPart.partNumber} onChange={(e) => setNewPart({...newPart, partNumber: e.target.value})} className="border rounded px-3 py-2 w-full" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle License Plate *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle License Plate</label>
                   <input type="text" value={newPart.licensePlate} onChange={(e) => setNewPart({...newPart, licensePlate: e.target.value})} className="border rounded px-3 py-2 w-full" placeholder="Enter vehicle license plate" />
                 </div>
                 <div>
@@ -405,12 +709,74 @@ export default function AutoParts() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Purchase Location</label>
-                  <input type="text" value={newPart.purchaseLocation} onChange={(e) => setNewPart({...newPart, purchaseLocation: e.target.value})} className="border rounded px-3 py-2 w-full" placeholder="AutoZone, O'Reilly, etc." />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Physical Store Location</label>
+                  <input type="text" value={newPart.purchaseLocation} onChange={(e) => setNewPart({...newPart, purchaseLocation: e.target.value})} className="border rounded px-3 py-2 w-full" placeholder="e.g., AutoZone Downtown" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Website for Reordering</label>
+                  <input type="url" value={newPart.website} onChange={(e) => setNewPart({...newPart, website: e.target.value})} className="border rounded px-3 py-2 w-full" placeholder="https://www.autozone.com/..." />
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  <textarea value={newPart.description} onChange={(e) => setNewPart({...newPart, description: e.target.value})} className="border rounded px-3 py-2 w-full" rows={2} />
+                <textarea value={newPart.description} onChange={(e) => setNewPart({...newPart, description: e.target.value})} className="border rounded px-3 py-2 w-full" rows={2} />
+                </div>
+                
+                {/* Metrics Section */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Metrics (Custom Measurements)</label>
+                  <div className="bg-gray-50 p-4 rounded-lg border">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
+                      <input 
+                        type="text" 
+                        placeholder="Metric name (e.g., Width)" 
+                        value={newMetricKey}
+                        onChange={(e) => setNewMetricKey(e.target.value)}
+                        className="border rounded px-3 py-2 text-sm"
+                      />
+                      <input 
+                        type="text" 
+                        placeholder="Value (e.g., 10)" 
+                        value={newMetricValue}
+                        onChange={(e) => setNewMetricValue(e.target.value)}
+                        className="border rounded px-3 py-2 text-sm"
+                      />
+                      <input 
+                        type="text" 
+                        placeholder="Unit (e.g., cm, kg)" 
+                        value={newMetricUnit}
+                        onChange={(e) => setNewMetricUnit(e.target.value)}
+                        className="border rounded px-3 py-2 text-sm"
+                      />
+                      <button 
+                        type="button"
+                        onClick={addMetric}
+                        disabled={!newMetricKey || !newMetricValue}
+                        className="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                      >
+                        Add Metric
+                      </button>
+                    </div>
+                    
+                    {newPart.metrics && newPart.metrics.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-gray-700">Added Metrics:</p>
+                        {newPart.metrics.map((metric, index) => (
+                          <div key={index} className="flex items-center justify-between bg-white p-2 rounded border">
+                            <span className="text-sm">
+                              <span className="font-medium">{metric.key}:</span> {metric.value} {metric.unit}
+                            </span>
+                            <button 
+                              type="button"
+                              onClick={() => removeMetric(index)}
+                              className="text-red-500 hover:text-red-700 text-sm"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="flex gap-3 mt-6">
@@ -447,15 +813,16 @@ export default function AutoParts() {
                     const status = getStockStatus(part)
                     return (
                       <tr key={part.id} className="border-t">
-                        <td className="px-4 py-3">{part.name}<br/><span className="text-sm text-gray-500">{part.make}</span></td>
+                        <td className="px-4 py-3">{part.name}<br/><span className="text-sm text-gray-500">{part.year ? `${part.year} ` : ''}{part.make} {part.model}</span></td>
                         <td className="px-4 py-3">{part.licensePlate || '-'}</td>
                         <td className="px-4 py-3 font-bold">{part.quantity}</td>
                         <td className="px-4 py-3">{part.desiredStockLevel}</td>
                         <td className="px-4 py-3"><span className={"px-2 py-1 rounded text-xs font-semibold " + status.color}>{status.label}</span></td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2">
-                            <button onClick={() => addStock(part.id)} className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">+</button>
-                            <button onClick={() => removeStock(part.id)} className="bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600">-</button>
+                            <button onClick={() => openStockModal(part, 'add')} className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600">+</button>
+                            <button onClick={() => openStockModal(part, 'remove')} className="bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600">-</button>
+                            <button onClick={() => openReorderModal(part)} className="bg-purple-500 text-white px-3 py-1 rounded text-sm hover:bg-purple-600">Reorder</button>
                           </div>
                         </td>
                       </tr>
@@ -511,9 +878,9 @@ export default function AutoParts() {
                       <h3 className="font-bold">{part.name}</h3>
                       <span className={"px-2 py-1 rounded text-xs " + status.color}>{status.label}</span>
                     </div>
-                    <p className="text-gray-600">{part.make} - {part.partNumber}</p>
+                    <p className="text-gray-600">{part.year ? `${part.year} ` : ''}{part.make} {part.model} - {part.partNumber}</p>
                     {part.licensePlate && <p className="text-blue-600 font-medium">🚗 {part.licensePlate}</p>}
-                    <p>Qty: {part.quantity} | ${(part.price || 0).toFixed(2)} | Zone: {part.zone || 'N/A'}</p>
+                    <p>Qty: {part.quantity} | ${part.price ? part.price.toFixed(2) : '0.00'} | Zone: {part.zone || 'N/A'}</p>
                   </div>
                 )
               })}
@@ -537,13 +904,16 @@ export default function AutoParts() {
                       <div className="flex justify-between items-center">
                         <div>
                           <h3 className="font-bold">{part.name}</h3>
-                          <p>{part.make} - {part.partNumber}</p>
+                          <p>{part.year ? `${part.year} ` : ''}{part.make} {part.model} - {part.partNumber}</p>
                           {part.licensePlate && <p className="text-blue-600">🚗 {part.licensePlate}</p>}
                           <p>Current: {part.quantity} | Desired: {part.desiredStockLevel}</p>
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={() => addStock(part.id)} className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                          <button onClick={() => openStockModal(part, 'add')} className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
                             Add Stock
+                          </button>
+                          <button onClick={() => openReorderModal(part)} className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600">
+                            🛒 Reorder
                           </button>
                         </div>
                       </div>
@@ -555,11 +925,137 @@ export default function AutoParts() {
           </div>
         )}
 
+        {activeTab === 'reorder' && (
+          <div>
+            <h2 className="text-2xl font-bold mb-6">🛒 Reorder Parts</h2>
+            <p className="text-gray-600 mb-6">Click on a part to see suggested websites for reordering</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {parts.map(part => (
+                <div 
+                  key={part.id} 
+                  onClick={() => openReorderModal(part)}
+                  className="bg-white p-4 rounded-lg shadow-md cursor-pointer hover:shadow-lg hover:border-purple-500 border-2 border-transparent transition-all"
+                >
+                  <div className="flex justify-between items-start">
+                    <h3 className="font-bold">{part.name}</h3>
+                    <span className="text-purple-600">🛒</span>
+                  </div>
+                  <p className="text-gray-600">{part.year ? `${part.year} ` : ''}{part.make} {part.model}</p>
+                  <p className="text-sm text-gray-500">{part.partNumber && `Part #: ${part.partNumber}`}</p>
+                  <div className="mt-3 pt-3 border-t flex justify-between items-center">
+                    <span className="text-sm font-medium">Current Qty: {part.quantity}</span>
+                    <span className="text-purple-600 text-sm font-medium">Click to Find →</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'reports' && (
+          <div>
+            <h2 className="text-2xl font-bold mb-6">📋 Reports & Printing</h2>
+            
+            {/* Report Filters */}
+            <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+              <h3 className="text-lg font-bold mb-4">Filter Report</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Report Type</label>
+                  <select value={reportFilter} onChange={(e) => setReportFilter(e.target.value)} className="border rounded px-3 py-2 w-full">
+                    <option value="all">All Parts</option>
+                    <option value="low-stock">Low Stock Parts</option>
+                    <option value="out-of-stock">Out of Stock Parts</option>
+                    <option value="reorder">Parts Needing Reorder</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Make</label>
+                  <select value={reportMakeFilter} onChange={(e) => setReportMakeFilter(e.target.value)} className="border rounded px-3 py-2 w-full">
+                    <option value="all">All makes</option>
+                    {uniqueMakes.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+              </div>
+              
+              <div className="flex gap-3 mt-6">
+                <button onClick={printReport} className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                  🖨️ Print Report
+                </button>
+                <button onClick={exportReportCSV} className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2">
+                  📥 Export CSV
+                </button>
+              </div>
+            </div>
+
+            {/* Report Preview */}
+            <div className="bg-white rounded-lg shadow-md overflow-hidden">
+              <div className="p-4 bg-gray-50 border-b">
+                <h3 className="font-bold">
+                  Report Preview: {reportFilter === 'all' ? 'All Parts' : 
+                                 reportFilter === 'low-stock' ? 'Low Stock Parts' :
+                                 reportFilter === 'out-of-stock' ? 'Out of Stock Parts' :
+                                 reportFilter === 'reorder' ? 'Parts Needing Reorder' : 'All Parts'}
+                  <span className="ml-2 text-gray-500 font-normal">({reportParts.length} parts)</span>
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Name</th>
+                      <th className="px-4 py-3 text-left">Vehicle</th>
+                      <th className="px-4 py-3 text-left">Part #</th>
+                      <th className="px-4 py-3 text-left">License Plate</th>
+                      <th className="px-4 py-3 text-left">Qty</th>
+                      <th className="px-4 py-3 text-left">Price</th>
+                      <th className="px-4 py-3 text-left">Zone</th>
+                      <th className="px-4 py-3 text-left">Status</th>
+                      <th className="px-4 py-3 text-left">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportParts.map(part => {
+                      const status = getStockStatus(part)
+                      return (
+                        <tr key={part.id} className="border-t hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium">{part.name}</td>
+                          <td className="px-4 py-3 text-gray-500">{part.year ? `${part.year} ` : ''}{part.make} {part.model}</td>
+                          <td className="px-4 py-3 text-gray-500">{part.partNumber || '-'}</td>
+                          <td className="px-4 py-3 text-gray-500">{part.licensePlate || '-'}</td>
+                          <td className="px-4 py-3 font-bold">{part.quantity}</td>
+                          <td className="px-4 py-3">${(part.price || 0).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-gray-500">{part.zone || '-'}</td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-1 rounded text-xs font-semibold ${status.color}`}>
+                              {status.label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <button onClick={() => openReorderModal(part)} className="bg-purple-500 text-white px-3 py-1 rounded text-sm hover:bg-purple-600">
+                              Reorder
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {reportParts.length === 0 && (
+                <div className="p-8 text-center text-gray-500">
+                  No parts match the selected filters
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeTab === 'stats' && (
           <div>
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-bold">Statistics Dashboard</h2>
-              <button onClick={printReport} className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700">
+              <button onClick={printInventoryReport} className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700">
                 Print Report
               </button>
             </div>
@@ -614,6 +1110,7 @@ export default function AutoParts() {
         )}
       </div>
 
+      {/* Delete Confirmation Modal */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-xl max-w-md">
@@ -622,6 +1119,125 @@ export default function AutoParts() {
             <div className="flex gap-3 justify-end">
               <button onClick={() => setDeleteConfirm(null)} className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Cancel</button>
               <button onClick={() => handleDelete(deleteConfirm)} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stock Transaction Modal */}
+      {showStockModal && stockPart && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md">
+            <h3 className="text-xl font-bold mb-4">
+              {stockChangeType === 'add' ? '➕ Add Stock' : '➖ Remove Stock'}
+            </h3>
+            <div className="mb-4">
+              <p className="text-gray-600 mb-2"><span className="font-semibold">Part:</span> {stockPart.name}</p>
+              <p className="text-gray-600 mb-2"><span className="font-semibold">Make:</span> {stockPart.year ? `${stockPart.year} ` : ''}{stockPart.make} {stockPart.model}</p>
+              <p className="text-gray-600 mb-4"><span className="font-semibold">Current Quantity:</span> {stockPart.quantity}</p>
+              
+              <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+              <input 
+                type="number" 
+                min="1" 
+                value={stockQuantity} 
+                onChange={(e) => setStockQuantity(parseInt(e.target.value) || 0)} 
+                className="border rounded px-3 py-2 w-full" 
+              />
+              
+              <label className="block text-sm font-medium text-gray-700 mb-1 mt-3">Notes (optional)</label>
+              <textarea 
+                value={stockNotes} 
+                onChange={(e) => setStockNotes(e.target.value)} 
+                className="border rounded px-3 py-2 w-full" 
+                rows={2}
+                placeholder="Add notes about this transaction..."
+              />
+              
+              <div className="mt-4 p-3 bg-gray-100 rounded">
+                <p className="text-sm">
+                  <span className="font-semibold">New Quantity:</span> {' '}
+                  {stockChangeType === 'add' 
+                    ? stockPart.quantity + stockQuantity 
+                    : Math.max(0, stockPart.quantity - stockQuantity)
+                  }
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowStockModal(false)} className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Cancel</button>
+              <button 
+                onClick={processStockTransaction} 
+                className={`${stockChangeType === 'add' ? 'bg-green-600 hover:bg-green-700' : 'bg-yellow-600 hover:bg-yellow-700'} text-white px-4 py-2 rounded`}
+              >
+                {stockChangeType === 'add' ? 'Add Stock' : 'Remove Stock'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reorder Modal */}
+      {showReorderModal && reorderPart && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold mb-2">🛒 Reorder: {reorderPart.name}</h3>
+            <p className="text-gray-600 mb-4">
+              {reorderPart.year ? `${reorderPart.year} ` : ''}{reorderPart.make} {reorderPart.model} 
+              {reorderPart.partNumber && ` - Part #: ${reorderPart.partNumber}`}
+            </p>
+            
+            {/* Search Query Display */}
+            <div className="mb-4 p-3 bg-purple-50 rounded-lg">
+              <p className="text-sm text-purple-700 font-semibold">Search Query:</p>
+              <p className="text-purple-900">
+                {reorderPart.name} {reorderPart.make} {reorderPart.model} {reorderPart.year} {reorderPart.partNumber}
+              </p>
+            </div>
+
+            {/* Custom Website Option */}
+            {reorderPart.website && (
+              <div className="mb-4">
+                <p className="text-sm font-semibold text-gray-700 mb-2">Your Saved Website:</p>
+                <button 
+                  onClick={() => openWebsite(reorderPart.website!)}
+                  className="w-full bg-blue-500 text-white px-4 py-3 rounded-lg hover:bg-blue-600 flex items-center justify-center gap-2"
+                >
+                  🌐 Visit: {reorderPart.website.replace(/^https?:\/\//, '')}
+                </button>
+              </div>
+            )}
+
+            {/* Physical Store Option */}
+            {reorderPart.purchaseLocation && (
+              <div className="mb-4">
+                <p className="text-sm font-semibold text-gray-700 mb-2">Physical Store:</p>
+                <div className="bg-green-50 border border-green-500 rounded-lg p-3">
+                  <p className="text-green-700 font-medium">📍 {reorderPart.purchaseLocation}</p>
+                  <p className="text-sm text-gray-600">Visit this store to purchase the part in person</p>
+                </div>
+              </div>
+            )}
+
+            {/* Suggested Websites */}
+            <div className="mb-4">
+              <p className="text-sm font-semibold text-gray-700 mb-2">Suggested Online Retailers:</p>
+              <div className="space-y-2">
+                {suggestedWebsites.filter(s => s.name !== 'Custom Website' && !s.name.startsWith('Visit:')).map((site, index) => (
+                  <button 
+                    key={index}
+                    onClick={() => openWebsite(site.url)}
+                    className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-3 rounded-lg flex items-center justify-between transition-colors"
+                  >
+                    <span className="font-medium">{site.name}</span>
+                    <span className="text-blue-600 text-sm">Search →</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end mt-4">
+              <button onClick={() => setShowReorderModal(false)} className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Close</button>
             </div>
           </div>
         </div>

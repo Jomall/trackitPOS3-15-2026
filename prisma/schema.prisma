@@ -30,19 +30,28 @@ model InventoryItem {
 }
 
 model BakeryItem {
-  id          Int      @id @default(autoincrement())
-  name        String
-  type        String   // machinery or equipment
-  description String?
-  quantity    Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               Int      @id @default(autoincrement())
+  name             String
+  type             String   // machinery, equipment, supplies
+  description      String?
+  quantity         Int      @default(0)
+  desiredStockLevel Int     @default(0)  // Desired stock level for alerts
+  expirationDate   String?  // For supplies that expire
+  purchaseLocation String?  // Where the item was purchased (physical store)
+  website          String?  // Website where the item can be ordered from
+  dateOfEntry      DateTime @default(now())
+  lastUpdated      DateTime @updatedAt
+  lastStockUpdate  DateTime? // Last time stock was added/removed
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 model AutoPart {
   id               Int      @id @default(autoincrement())
   name             String
   make             String?
+  model            String?  // Vehicle model
+  year             Int?     // Vehicle year
   partNumber       String?
   description      String?
   quantity         Int      @default(0)
@@ -50,7 +59,8 @@ model AutoPart {
   photo            String?
   licensePlate     String?
   vin              String?
-  purchaseLocation String?   // Where the part was purchased
+  purchaseLocation String?   // Where the part was purchased (physical store)
+  website          String?   // Website where the part can be ordered from
   desiredStockLevel Int      @default(0)  // Desired stock level for alerts
   zone             String?   // Warehouse storage zone (e.g., A1, B2, C3)
   dateOfEntry      DateTime  @default(now())  // When the part was first entered
