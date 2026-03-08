@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import POSComponent from '@/components/POSComponent'
 
 interface AutoPart {
   id: number
@@ -534,6 +535,7 @@ export default function AutoParts() {
 
   const tabs = [
     { id: 'inventory', label: 'Inventory List', icon: '📦' },
+    { id: 'pos', label: 'POS Sale', icon: '💰' },
     { id: 'add', label: 'Add Part', icon: '➕' },
     { id: 'stock', label: 'Stock Management', icon: '📊' },
     { id: 'search', label: 'Search', icon: '🔍' },
@@ -581,6 +583,19 @@ export default function AutoParts() {
       </div>
 
       <div className="container mx-auto px-4 py-8">
+        {activeTab === 'pos' && (
+          <div>
+            <POSComponent 
+              parts={parts} 
+              onCompleteSale={(saleData) => {
+                console.log('Sale completed:', saleData)
+                alert('Sale completed! Receipt printed.')
+              }} 
+            />
+          </div>
+        )}
+
+
         {activeTab === 'inventory' && (
           <div>
             <div className="flex justify-between items-center mb-6">

@@ -15,8 +15,23 @@ model User {
   email     String   @unique
   name      String?
   password  String
+  role      String   @default("employee") // admin, manager, employee
+  pin       String?  // 4-6 digit PIN for quick login
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  sales     Sale[]
+  drawerTransactions DrawerTransaction[]
+  timeLogs  EmployeeTimeLog[]
+}
+
+model EmployeeTimeLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  action    String   // clock_in, clock_out
+  timestamp DateTime @default(now())
+  notes     String?
 }
 
 model InventoryItem {
@@ -47,27 +62,122 @@ model BakeryItem {
 }
 
 model AutoPart {
-  id               Int      @id @default(autoincrement())
+  id               Int       @id @default(autoincrement())
   name             String
   make             String?
-  model            String?  // Vehicle model
-  year             Int?     // Vehicle year
+  model            String?   // Vehicle model
+  year             Int?      // Vehicle year
   partNumber       String?
   description      String?
-  quantity         Int      @default(0)
+  quantity         Int       @default(0)
   price            Float?
   photo            String?
   licensePlate     String?
   vin              String?
   purchaseLocation String?   // Where the part was purchased (physical store)
   website          String?   // Website where the part can be ordered from
-  desiredStockLevel Int      @default(0)  // Desired stock level for alerts
+  desiredStockLevel Int     @default(0)  // Desired stock level for alerts
   zone             String?   // Warehouse storage zone (e.g., A1, B2, C3)
+  reorderTime      Int?      // Average days to reorder (for forecasting)
   dateOfEntry      DateTime  @default(now())  // When the part was first entered
   lastUpdated      DateTime  @updatedAt  // Last time the part was edited
   lastStockUpdate  DateTime? // Last time stock was added/removed
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+  saleItems        SaleItem[]
+}
+
+model Sale {
+  id              Int       @id @default(autoincrement())
+  saleDate        DateTime  @default(now())
+  subtotal        Float     // Total before tax and discount
+  taxAmount       Float     @default(0)  // Sales tax amount
+  taxRate         Float     @default(0)  // Tax rate percentage (e.g., 8.25 for 8.25%)
+  discountAmount  Float     @default(0)  // Discount amount
+  discountType    String?   // 'percentage' or 'fixed'
+  discountValue   Float?    // The discount value applied
+  totalAmount     Float
+  paymentMethod   String?   // cash, card, split, gift_card, etc.
+  cashTendered    Float?    // Amount of cash received
+  changeGiven     Float?    // Change given back
+  customerName    String?
+  customerPhone   String?
+  customerEmail   String?   // For digital receipts
+  notes           String?
+  receiptNumber   String?   // Unique receipt number
+  employeeId      Int?      // Who processed the sale
+  employee        User?     @relation(fields: [employeeId], references: [id])
+  customerId      Int?      // Link to customer
+  customer        Customer? @relation(fields: [customerId], references: [id])
+  items           SaleItem[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// Suspended/Held sales that can be recalled later
+model SuspendedSale {
+  id              Int       @id @default(autoincrement())
+  suspendDate     DateTime  @default(now())
+  subtotal        Float
+  taxAmount       Float     @default(0)
+  taxRate         Float     @default(0)
+  discountAmount  Float     @default(0)
+  discountType    String?
+  discountValue   Float?
+  totalAmount     Float
+  customerName    String?
+  customerPhone   String?
+  notes           String?
+  saleKey        String    // Key to recall sale (e.g., "SALE-001")
+  items           SuspendedSaleItem[]
+}
+
+model SuspendedSaleItem {
+  id                Int           @id @default(autoincrement())
+  suspendedSaleId   Int
+  suspendedSale     SuspendedSale @relation(fields: [suspendedSaleId], references: [id])
+  autoPartId        Int
+  quantity          Int
+  unitPrice         Float
+  subtotal          Float
+}
+
+// Cash drawer transactions (no sale, drawer opens, etc.)
+model DrawerTransaction {
+  id            Int       @id @default(autoincrement())
+  timestamp     DateTime  @default(now())
+  type          String    // no_sale, drop, pickup, cash_in, cash_out
+  amount        Float     // Amount added or removed
+  notes         String?
+  userId        Int
+  user          User      @relation(fields: [userId], references: [id])
+}
+
+// Customer model for loyalty and tracking
+model Customer {
+  id              Int       @id @default(autoincrement())
+  name            String
+  phone           String?
+  email           String?
+  totalPurchases  Float     @default(0)
+  points          Int       @default(0)  // Loyalty points
+  visitCount      Int       @default(0)
+  lastVisit       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  sales           Sale[]
+}
+
+model SaleItem {
+  id              Int       @id @default(autoincrement())
+  saleId          Int
+  sale            Sale      @relation(fields: [saleId], references: [id])
+  autoPartId      Int
+  autoPart        AutoPart  @relation(fields: [autoPartId], references: [id])
+  quantity        Int
+  unitPrice       Float
+  subtotal        Float
+  createdAt       DateTime  @default(now())
 }
 
 model Vehicle {

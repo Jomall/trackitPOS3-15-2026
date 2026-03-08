@@ -35,6 +35,14 @@ export default function Home() {
       hoverColor: "hover:from-red-600 hover:to-red-700"
     },
     {
+      href: "/auto-parts?tab=pos",
+      title: "POS System",
+      description: "Point of Sale & Sales Reports",
+      icon: "💰",
+      color: "from-emerald-500 to-emerald-600",
+      hoverColor: "hover:from-emerald-600 hover:to-emerald-700"
+    },
+    {
       href: "/maintenance",
       title: "Vehicle Maintenance",
       description: "Track vehicle maintenance",
