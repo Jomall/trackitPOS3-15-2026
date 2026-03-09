@@ -1759,12 +1759,25 @@ export default function POSComponent({ parts, onCompleteSale }: POSComponentProp
                 <span>-${dailyTotals.totalCancelled.toFixed(2)}</span>
               </div>
               <div className="border-t pt-2 flex justify-between text-lg font-bold">
-                <span>Net Total:</span>
-                <span className="text-green-600">${(dailyTotals.totalSales - dailyTotals.totalRefunds - dailyTotals.totalVoided - dailyTotals.totalCancelled).toFixed(2)}</span>
+                  <span>Net Total:</span>
+                  <span className="text-green-600">${(dailyTotals.totalSales - dailyTotals.totalRefunds - dailyTotals.totalVoided - dailyTotals.totalCancelled).toFixed(2)}</span>
+                </div>
               </div>
-            </div>
 
-            {reportType === 'z' && (
+              {/* Payment Breakdown */}
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <p className="font-bold mb-2 text-sm">Payment Breakdown:</p>
+                <div className="space-y-1">
+                  {dailyTotals.paymentBreakdown.map(p => (
+                    <div key={p.method} className="flex justify-between text-sm">
+                      <span className="capitalize">{p.method}:</span>
+                      <span className={p.method === 'charge' ? 'font-bold text-indigo-600' : 'font-medium'}>${p.total.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {reportType === 'z' && (
               <p className="text-center text-red-500 text-sm mb-4">⚠️ WARNING: Z-Report will reset daily totals</p>
             )}
 
