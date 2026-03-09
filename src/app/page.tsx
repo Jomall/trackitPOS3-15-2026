@@ -60,7 +60,7 @@ export default function Home() {
           <div className="inline-block p-4 bg-white rounded-full shadow-lg mb-6">
             <span className="text-6xl">📊</span>
           </div>
-          <h1 className="text-5xl font-bold text-gray-800 mb-4">Welcome to Trackit</h1>
+          <h1 className="text-5xl font-bold text-gray-800 mb-4">Welcome to Trackit POS</h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
             Comprehensive Inventory and Maintenance Management System
           </p>
