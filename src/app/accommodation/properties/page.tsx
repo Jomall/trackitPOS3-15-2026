@@ -168,15 +168,25 @@ export default function PropertiesPage() {
                     <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Name</th>
                     <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Rent</th>
                     <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Status</th>
-                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Occupancy</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Furnishing</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-500">Occupancy</th>
                     <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-wider text-gray-500">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {filteredProperties.map((property) => (
+{properties.map((property) => (
                     <tr key={property.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap font-mono font-medium">
                         {property.propertyId}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                          property.furnishingType === 'fully_furnished' ? 'bg-emerald-100 text-emerald-800' :
+                          property.furnishingType === 'semi_furnished' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {property.furnishingType || 'Unfurnished'}
+                        </span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="font-medium">{property.name}</div>
@@ -212,7 +222,7 @@ export default function PropertiesPage() {
                       </td>
                     </tr>
                   ))}
-                  {filteredProperties.length === 0 && (
+{properties.length === 0 && (
                     <tr>
                       <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
                         No properties match "{searchTerm}"

@@ -1,7 +1,8 @@
- 'use client'
+'use client'
 
 import Link from 'next/link'
 import { useState } from 'react'
+import InventoryForm from './InventoryForm'
 
 export default function NewPropertyPage() {
   const [isPending, setIsPending] = useState(false)
@@ -22,7 +23,6 @@ export default function NewPropertyPage() {
   }
 
   return (
-
     <main className="min-h-screen bg-gradient-to-br from-orange-50 to-pink-50 p-8">
       <div className="max-w-2xl mx-auto">
         <Link 
@@ -116,6 +116,21 @@ export default function NewPropertyPage() {
             </div>
 
             <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">Furnishing Type</label>
+              <select 
+                name="furnishingType"
+                className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:ring-4 focus:ring-orange-200 focus:border-orange-500 transition-all duration-300 text-lg"
+              >
+                <option value="">Select...</option>
+                <option value="unfurnished">Unfurnished</option>
+                <option value="semi_furnished">Semi Furnished</option>
+                <option value="fully_furnished">Fully Furnished</option>
+              </select>
+            </div>
+
+            <InventoryForm />
+
+            <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">Amenities (optional)</label>
               <textarea 
                 name="amenities"
@@ -127,9 +142,10 @@ export default function NewPropertyPage() {
 
             <button 
               type="submit"
-              className="w-full bg-gradient-to-r from-orange-500 to-pink-600 text-white py-4 px-8 rounded-2xl text-xl font-bold hover:from-orange-600 hover:to-pink-700 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300"
+              disabled={isPending}
+              className="w-full bg-gradient-to-r from-orange-500 to-pink-600 text-white py-4 px-8 rounded-2xl text-xl font-bold hover:from-orange-600 hover:to-pink-700 shadow-xl hover:shadow-2xl transform hover:-translate-y-1 transition-all duration-300 disabled:opacity-50"
             >
-              Create Property
+              {isPending ? 'Creating...' : 'Create Property'}
             </button>
           </form>
         </div>

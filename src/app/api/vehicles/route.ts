@@ -11,11 +11,13 @@ export async function GET() {
         _count: {
           select: {
             maintenances: true,
-            damages: true
+            damages: true,
+            rentalAgreements: true
           }
         }
       }
     })
+
     return NextResponse.json({ vehicles })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch vehicles' }, { status: 500 })
