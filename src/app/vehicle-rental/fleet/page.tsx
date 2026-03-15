@@ -1,12 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import EditVehicleModal from './EditVehicleModal'
+// No types needed
 
 export default function FleetPage() {
   const [vehicles, setVehicles] = useState([])
   const [loading, setLoading] = useState(true)
   const [deleteLoading, setDeleteLoading] = useState<number | null>(null)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [selectedVehicle, setSelectedVehicle] = useState(null)
 
   useEffect(() => {
     fetch('/api/vehicles')
@@ -18,6 +22,18 @@ export default function FleetPage() {
       .catch(() => setLoading(false))
   }, [])
 
+  const refetch = useCallback(async () => {
+    const res = await fetch('/api/vehicles')
+    const data = await res.json()
+    setVehicles(data.vehicles || [])
+  }, [])
+
+  const handleEdit = (vehicle) => {
+    setSelectedVehicle(vehicle)
+    setShowEditModal(true)
+  }
+
+
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this vehicle?')) return
 
@@ -28,7 +44,7 @@ export default function FleetPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id })
       })
-      setVehicles(vehicles.filter(v => v.id !== id))
+      refetch()
     } catch (error) {
       alert('Error deleting vehicle.')
     } finally {
@@ -107,6 +123,15 @@ export default function FleetPage() {
                       )}
                     </td>
                     <td className="p-6">
+                      <Link href={`/vehicle-rental/fleet/${vehicle.id}`} className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-bold transition-all text-sm mr-2">
+                        👁️ View
+                      </Link>
+                      <button 
+                        onClick={() => handleEdit(vehicle)}
+                        className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg font-bold transition-all text-sm mr-2"
+                      >
+                        ✏️ Edit
+                      </button>
                       <button 
                         onClick={() => handleDelete(vehicle.id)} 
                         disabled={deleteLoading === vehicle.id}
@@ -122,8 +147,17 @@ export default function FleetPage() {
             </table>
           </div>
         )}
+        {selectedVehicle && (
+          <EditVehicleModal 
+            vehicle={selectedVehicle} 
+            isOpen={showEditModal} 
+            onClose={() => setShowEditModal(false)} 
+            onUpdate={refetch} 
+          />
+        )}
       </div>
     </main>
   )
 }
+
 

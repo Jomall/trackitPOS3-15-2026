@@ -38,7 +38,10 @@ export async function GET(request: Request) {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' },
+        include: {
+          householdItems: true
+        }
       }),
       prisma.property.count({ where })
     ])
