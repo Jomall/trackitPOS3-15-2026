@@ -1,3 +1,5 @@
+// Full schema with Vehicle.damages
+
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
@@ -10,19 +12,21 @@ datasource db {
   url      = "file:./dev.db"
 }
 
+
+
 model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  name      String?
-  password  String
-  role      String   @default("employee") // admin, manager, employee
-  pin       String?  // 4-6 digit PIN for quick login
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  sales     Sale[]
+  id              Int      @id @default(autoincrement())
+  email           String   @unique
+  name            String?
+  password        String
+  role            String   @default("employee") // admin, manager, employee
+  pin             String?  // 4-6 digit PIN for quick login
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  sales           Sale[]
   drawerTransactions DrawerTransaction[]
-  timeLogs  EmployeeTimeLog[]
+  timeLogs        EmployeeTimeLog[]
 }
 
 model EmployeeTimeLog {
@@ -187,8 +191,17 @@ model Vehicle {
   year         Int
   vin          String        @unique
   licensePlate String
+  color        String?
+  status       String?       @default("Available")
+  category     String?
+  transmissionType String?
+  fuelType     String?
+  currentOdometerReading Int?
+  nextServiceDueDate DateTime?
   notes        String?
   maintenances Maintenance[]
+  damages      ClientDamage[] @relation("VehicleDamages")
+  rentalAgreements VehicleRentalAgreement[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }
@@ -206,3 +219,160 @@ model Maintenance {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+model Property {
+  id            Int               @id @default(autoincrement())
+  propertyId    String            @unique // e.g., "APT101", "ROOM205"
+  name          String            // "Studio Apartment 1A"
+  description   String?
+  address       String
+  occupancyLimit Int              // Max number of occupants
+  rentAmount    Float
+  depositAmount Float?            // Security deposit
+  amenities     String?           // "wifi, parking, pool"
+  status        String             @default("AVAILABLE")
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  agreements    RentalAgreement[]
+  payments      RentalPayment[]
+}
+
+model Tenant {
+  id                    Int              @id @default(autoincrement())
+  name                  String
+  phone                 String?
+  email                 String?
+  idNumber              String?          // Government ID
+  idPhoto               String?          // Path to uploaded ID photo
+  requiresSecurityDeposit Boolean         @default(true)
+  securityDepositAmount Float? 
+  securityDepositCollected Boolean        @default(false)
+  emergencyContact       String?
+  isBlacklisted         Boolean          @default(false)
+  blacklistReason        String?
+  blacklistUntil        DateTime?        // null = indefinite
+  blacklistBy           Int?             // Admin user ID
+  blacklistDate         DateTime? 
+  createdAt             DateTime         @default(now())
+  agreements            RentalAgreement[]
+
+  @@unique([name, idNumber])
+}
+
+model VehicleRentalAgreement {
+  id                Int                  @id @default(autoincrement())
+  agreementNumber   String               @unique
+  vehicleId         Int
+  rentalClientId    Int
+  agreementType     String  // 'daily' | 'weekly' | 'monthly' | 'fixed-lease'
+  startDate         DateTime
+  endDate           DateTime?
+  dailyAmount       Float?
+  weeklyAmount      Float?
+  monthlyAmount     Float?
+  leaseAmount       Float?
+  depositAmount     Float?
+  lateFee           Float?
+  lateFeeAfterDays  Int?
+  balance           Float                @default(0)
+  status            String               @default("active")
+  notes             String?
+  createdAt         DateTime             @default(now())
+  
+  vehicle           Vehicle              @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  rentalClient      RentalClient         @relation(fields: [rentalClientId], references: [id], onDelete: Cascade)
+}
+
+model RentalAgreement {
+  id             Int      @id @default(autoincrement())
+  agreementNumber String @unique // "RA-2026-001"
+  propertyId     Int
+  property       Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenantId       Int
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  startDate      DateTime
+  endDate        DateTime?
+  rentAmount     Float
+  depositAmount  Float
+  status         String          @default("ACTIVE")
+  terms          String?          // Rental terms and conditions
+  createdAt      DateTime         @default(now())
+  signedAt       DateTime?
+  payments       RentalPayment[]
+}
+
+model RentalPayment {
+  id            Int      @id @default(autoincrement())
+  agreementId   Int
+  agreement     RentalAgreement @relation(fields: [agreementId], references: [id])
+  propertyId    Int?
+  property      Property? @relation(fields: [propertyId], references: [id])
+  amount        Float
+  paymentDate   DateTime @default(now())
+  method        String   // cash, transfer, check
+  receiptNumber String?
+  notes         String?
+}
+
+model RentalClient {
+  id                    Int              @id @default(autoincrement())
+  name                  String
+  phone                 String?
+  email                 String?
+  driversLicenseNumber  String?
+  driversLicensePhoto   String?
+  preferredVehicle      String?
+  emergencyContact      String?
+  balance               Float            @default(0)
+  isBlacklisted         Boolean          @default(false)
+  blacklistReason       String?
+  blacklistUntil        DateTime?
+  blacklistBy           Int?
+  blacklistDate         DateTime? 
+  createdAt             DateTime         @default(now())
+
+  damages              ClientDamage[]
+  payments             ClientPayment[]
+  rentalAgreements      VehicleRentalAgreement[]
+
+  @@unique([name, driversLicenseNumber])
+}
+
+model ClientDamage {
+  id                 Int       @id @default(autoincrement())
+  rentalClientId     Int
+  rentalClient       RentalClient @relation(fields: [rentalClientId], references: [id], onDelete: Cascade)
+  vehicleId          Int?
+  vehicle            Vehicle?       @relation("VehicleDamages", fields: [vehicleId], references: [id])
+  description        String
+  amount             Float
+  date               DateTime  @default(now())
+  accidentDate       DateTime?
+  accidentLocation   String?
+  vehiclesInvolved   String?
+  payerName          String?
+  payerAddress       String?
+  receiverName       String?
+  receiverAddress    String?
+  status             String    @default("pending") // pending, paid, waived
+  notes              String?
+  createdAt          DateTime  @default(now())
+}
+
+model ClientPayment {
+  id                   Int       @id @default(autoincrement())
+  rentalClientId       Int
+  rentalClient         RentalClient @relation(fields: [rentalClientId], references: [id], onDelete: Cascade)
+  amount               Float
+  paymentDate          DateTime  @default(now())
+  method               String    // cash, card, bank
+  notes                String?
+  totalAgreementAmount Float?
+  installmentNumber    Int?
+  totalInstallments    Int?
+  dueDate              DateTime?
+  lateFeeAmount        Float?
+  lateFeeRate          Float?
+  createdAt            DateTime  @default(now())
+}
+

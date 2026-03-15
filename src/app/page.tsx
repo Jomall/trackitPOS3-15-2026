@@ -49,6 +49,22 @@ export default function Home() {
       icon: "🚗",
       color: "from-purple-500 to-purple-600",
       hoverColor: "hover:from-purple-600 hover:to-purple-700"
+    },
+    {
+      href: "/accommodation",
+      title: "Accommodation Rental",
+      description: "Manage rental agreements & payments",
+      icon: "🏠",
+      color: "from-indigo-500 to-purple-600",
+      hoverColor: "hover:from-indigo-600 hover:to-purple-700"
+    },
+    {
+      href: "/vehicle-rental",
+      title: "Vehicle Rental Management",
+      description: "Fleet management and client rentals",
+      icon: "🚘",
+      color: "from-orange-500 to-red-600",
+      hoverColor: "hover:from-orange-600 hover:to-red-700"
     }
   ]
 
@@ -109,3 +125,4 @@ export default function Home() {
     </main>
   )
 }
+

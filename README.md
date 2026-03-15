@@ -1,4 +1,4 @@
-# How to Manually Import Trackit Files from GitHub and Run on Localhost 3000
+
 
 ## Step-by-Step Guide
 
